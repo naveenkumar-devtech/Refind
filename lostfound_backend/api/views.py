@@ -12,15 +12,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.serializers import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from fuzzywuzzy import fuzz
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from api.models import Item, Category, Message, CustomUser, ClaimAttempt
 from api.serializers import (
     ItemSerializer, CategorySerializer, ClaimAttemptSerializer,
     MessageSerializer, RegisterSerializer, UserProfileSerializer
 )
 from api.filters import ItemFilter
-from chatbot.matching import mask_text, match_items
+from chatbot.match import mask_text, match_items  # Updated import
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +85,7 @@ def run_matching_in_background(item_id):
         logger.info(f"Background task: Started for item ID {item.id} (Status: {item.status})")
         
         matches = match_items(item)
-        logger.debug(f"Matches found for item {item.id}: {matches}")  # Debug match details
+        logger.debug(f"Matches found for item {item.id}: {matches}")
         
         if matches:
             high_confidence_matches = [m for m in matches if m['score'] >= 0.60]
@@ -99,33 +97,14 @@ def run_matching_in_background(item_id):
                     matches_summary = "\n".join(
                         [f"- Potential Match: Found Item (Hint: '{m['details']['title_hint']}'), Confidence: {m['score']*100:.0f}%" for m in high_confidence_matches]
                     )
-                    send_mail(
-                        subject="📩 Potential Match Found for Your Lost Item",
-                        message=(
-                            f"Dear {getattr(item.user, 'name', item.user.username)},\n\n"
-                            f"Thank you for using Refind. We are pleased to inform you that our advanced matching algorithm has identified potential matches for your lost item: '{item.title}'.\n\n"
-                            f"Match Details:\n{matches_summary}\n\n"
-                            f"Please log in to your Refind dashboard to review these matches and initiate a chat with the finders to verify ownership.\n\n"
-                            f"Access your dashboard: {site_url}/dashboard\n\n"
-                            f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
-                        ),
-                        from_email=settings.DEFAULT_FROM_EMAIL,
-                        recipient_list=[item.user.email],
-                        fail_silently=False,
-                    )
-                    logger.info(f"Match notification email sent to {item.user.email} for lost item {item.id}")
-                elif item.status == 'found' and item.user.email:
-                    matches_summary = "\n".join(
-                        [f"- Potential Match: Lost Item (Hint: '{m['details']['title_hint']}'), Confidence: {m['score']*100:.0f}%" for m in high_confidence_matches if m.get('item_id') != item_id]
-                    )
-                    if matches_summary:  # Only send email if there are valid external matches
+                    try:
                         send_mail(
-                            subject="📩 Potential Match Found for Your Found Item",
+                            subject="📩 Potential Match Found for Your Lost Item",
                             message=(
                                 f"Dear {getattr(item.user, 'name', item.user.username)},\n\n"
-                                f"Thank you for contributing to Refind. Our sophisticated matching system has detected potential matches for the item you reported as found: '{item.title}'.\n\n"
+                                f"Thank you for using Refind. We are pleased to inform you that our advanced matching algorithm has identified potential matches for your lost item: '{item.title}'.\n\n"
                                 f"Match Details:\n{matches_summary}\n\n"
-                                f"We kindly request you to log in to your Refind dashboard to review these matches and engage in a chat with the owner.\n\n"
+                                f"Please log in to your Refind dashboard to review these matches and initiate a chat with the finders to verify ownership.\n\n"
                                 f"Access your dashboard: {site_url}/dashboard\n\n"
                                 f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
                             ),
@@ -133,48 +112,79 @@ def run_matching_in_background(item_id):
                             recipient_list=[item.user.email],
                             fail_silently=False,
                         )
-                        logger.info(f"Match notification email sent to {item.user.email} for found item {item.id}")
+                        logger.info(f"Match notification email sent to {item.user.email} for lost item {item.id}")
+                    except Exception as e:
+                        logger.error(f"Failed to send email to {item.user.email} for lost item {item.id}: {str(e)}")
+                elif item.status == 'found' and item.user.email:
+                    matches_summary = "\n".join(
+                        [f"- Potential Match: Lost Item (Hint: '{m['details']['title_hint']}'), Confidence: {m['score']*100:.0f}%" for m in high_confidence_matches if m.get('item_id') != item_id]
+                    )
+                    if matches_summary:
+                        try:
+                            send_mail(
+                                subject="📩 Potential Match Found for Your Found Item",
+                                message=(
+                                    f"Dear {getattr(item.user, 'name', item.user.username)},\n\n"
+                                    f"Thank you for contributing to Refind. Our sophisticated matching system has detected potential matches for the item you reported as found: '{item.title}'.\n\n"
+                                    f"Match Details:\n{matches_summary}\n\n"
+                                    f"We kindly request you to log in to your Refind dashboard to review these matches and engage in a chat with the owner.\n\n"
+                                    f"Access your dashboard: {site_url}/dashboard\n\n"
+                                    f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
+                                ),
+                                from_email=settings.DEFAULT_FROM_EMAIL,
+                                recipient_list=[item.user.email],
+                                fail_silently=False,
+                            )
+                            logger.info(f"Match notification email sent to {item.user.email} for found item {item.id}")
+                        except Exception as e:
+                            logger.error(f"Failed to send email to {item.user.email} for found item {item.id}: {str(e)}")
 
                 # Email for owners of matching items (both lost and found), excluding self
                 for match in high_confidence_matches:
                     matched_item_id = match.get('item_id') or match.get('id')
-                    if matched_item_id and matched_item_id != item_id:  # Exclude self-match
+                    if matched_item_id and matched_item_id != item_id:
                         matched_item = Item.objects.get(id=matched_item_id)
                         if matched_item.user.email and matched_item.user.email != item.user.email:
                             if matched_item.status == 'lost':
                                 matches_summary = f"- Potential Match: Found Item (Hint: '{item.title}'), Confidence: {match['score']*100:.0f}%"
-                                send_mail(
-                                    subject="📩 Potential Match Found for Your Lost Item",
-                                    message=(
-                                        f"Dear {getattr(matched_item.user, 'name', matched_item.user.username)},\n\n"
-                                        f"Thank you for using Refind. We have identified a potential match for your lost item: '{matched_item.title}'.\n\n"
-                                        f"Match Details:\n{matches_summary}\n\n"
-                                        f"Please log in to your Refind dashboard to review this match and initiate a chat with the finder.\n\n"
-                                        f"Access your dashboard: {site_url}/dashboard\n\n"
-                                        f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
-                                    ),
-                                    from_email=settings.DEFAULT_FROM_EMAIL,
-                                    recipient_list=[matched_item.user.email],
-                                    fail_silently=False,
-                                )
-                                logger.info(f"Match notification email sent to {matched_item.user.email} for lost item {matched_item.id}")
+                                try:
+                                    send_mail(
+                                        subject="📩 Potential Match Found for Your Lost Item",
+                                        message=(
+                                            f"Dear {getattr(matched_item.user, 'name', matched_item.user.username)},\n\n"
+                                            f"Thank you for using Refind. We have identified a potential match for your lost item: '{matched_item.title}'.\n\n"
+                                            f"Match Details:\n{matches_summary}\n\n"
+                                            f"Please log in to your Refind dashboard to review this match and initiate a chat with the finder.\n\n"
+                                            f"Access your dashboard: {site_url}/dashboard\n\n"
+                                            f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
+                                        ),
+                                        from_email=settings.DEFAULT_FROM_EMAIL,
+                                        recipient_list=[matched_item.user.email],
+                                        fail_silently=False,
+                                    )
+                                    logger.info(f"Match notification email sent to {matched_item.user.email} for lost item {matched_item.id}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send email to {matched_item.user.email} for lost item {matched_item.id}: {str(e)}")
                             elif matched_item.status == 'found':
                                 matches_summary = f"- Potential Match: Lost Item (Hint: '{item.title}'), Confidence: {match['score']*100:.0f}%"
-                                send_mail(
-                                    subject="📩 Potential Match Found for Your Found Item",
-                                    message=(
-                                        f"Dear {getattr(matched_item.user, 'name', matched_item.user.username)},\n\n"
-                                        f"Thank you for contributing to Refind. A potential match has been detected for your found item: '{matched_item.title}'.\n\n"
-                                        f"Match Details:\n{matches_summary}\n\n"
-                                        f"Please log in to your Refind dashboard to review this match and engage with the owner.\n\n"
-                                        f"Access your dashboard: {site_url}/dashboard\n\n"
-                                        f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
-                                    ),
-                                    from_email=settings.DEFAULT_FROM_EMAIL,
-                                    recipient_list=[matched_item.user.email],
-                                    fail_silently=False,
-                                )
-                                logger.info(f"Match notification email sent to {matched_item.user.email} for found item {matched_item.id}")
+                                try:
+                                    send_mail(
+                                        subject="📩 Potential Match Found for Your Found Item",
+                                        message=(
+                                            f"Dear {getattr(matched_item.user, 'name', matched_item.user.username)},\n\n"
+                                            f"Thank you for contributing to Refind. A potential match has been detected for your found item: '{matched_item.title}'.\n\n"
+                                            f"Match Details:\n{matches_summary}\n\n"
+                                            f"Please log in to your Refind dashboard to review this match and engage with the owner.\n\n"
+                                            f"Access your dashboard: {site_url}/dashboard\n\n"
+                                            f"Best regards,\nThe Refind Team\nsupport@refind.com | {site_url}"
+                                        ),
+                                        from_email=settings.DEFAULT_FROM_EMAIL,
+                                        recipient_list=[matched_item.user.email],
+                                        fail_silently=False,
+                                    )
+                                    logger.info(f"Match notification email sent to {matched_item.user.email} for found item {matched_item.id}")
+                                except Exception as e:
+                                    logger.error(f"Failed to send email to {matched_item.user.email} for found item {matched_item.id}: {str(e)}")
             else:
                 logger.info(f"Matches found for item {item.id}, but none met the >60% confidence threshold.")
         else:
@@ -240,7 +250,7 @@ class ClaimItemView(generics.GenericAPIView):
                 user=request.user,
                 claim_note=claim_note,
                 similarity_score=round(score, 2),
-                status='pending'  # Always pending, manual approval via dashboard
+                status='pending'
             )
             
             logger.info(f"Claim attempt created for item {item_id} by user {request.user.username}")
@@ -418,7 +428,6 @@ class MessageRecipientsView(generics.ListAPIView):
         logger.debug(f"Fetching recipients for item {item_id} by user {user.username}")
         try:
             item = Item.objects.get(id=item_id)
-            # Exclude the item owner from recipients to prevent self-chat
             recipients = CustomUser.objects.exclude(id=item.user.id).distinct()
             logger.debug(f"Recipients for item {item_id}: {[u.username for u in recipients]}")
             return recipients
@@ -457,12 +466,10 @@ class ChatThreadView(APIView):
         receiver_id = request.query_params.get("receiver_id")
         item_id = request.query_params.get("item_id")
 
-        # Validate parameters
         if not receiver_id or not item_id:
             logger.error(f"Missing parameters: receiver_id={receiver_id}, item_id={item_id}")
             return Response({"error": "receiver_id and item_id are required."}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate that parameters are numeric
         if not receiver_id.isdigit() or not item_id.isdigit():
             logger.error(f"Invalid parameters: receiver_id={receiver_id}, item_id={item_id}")
             return Response({"error": "receiver_id and item_id must be valid numbers."}, status=status.HTTP_400_BAD_REQUEST)
@@ -471,7 +478,6 @@ class ChatThreadView(APIView):
             receiver_id = int(receiver_id)
             item_id = int(item_id)
 
-            # Verify that item and receiver exist
             if not Item.objects.filter(id=item_id).exists():
                 logger.error(f"Item {item_id} not found")
                 return Response({"error": "Item not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -479,7 +485,6 @@ class ChatThreadView(APIView):
                 logger.error(f"Receiver {receiver_id} not found")
                 return Response({"error": "Receiver not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            # Prevent item owner from chatting with themselves
             item = Item.objects.get(id=item_id)
             if item.user.id == request.user.id and receiver_id == request.user.id:
                 logger.error(f"User {request.user.username} attempted to chat with themselves for item {item_id}")
