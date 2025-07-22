@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Github, Mail, Linkedin } from "lucide-react";
-import developerImage from "./assets/Developer_image.png"; // Import the local image
+import developerImage from "../assets/Developer_image.png"; // Import the local image
 
 const Developers = () => {
   const [isLoaded, setIsLoaded] = useState(false);
