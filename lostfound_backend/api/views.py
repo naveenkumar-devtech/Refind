@@ -18,7 +18,7 @@ from api.serializers import (
     MessageSerializer, RegisterSerializer, UserProfileSerializer
 )
 from api.filters import ItemFilter
-from chatbot.match import mask_text, match_items  # Updated import
+from chatbot.matching import mask_text, match_items  # Updated import
 
 logger = logging.getLogger(__name__)
 
