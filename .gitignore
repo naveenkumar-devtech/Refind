@@ -1,0 +1,36 @@
+
+     # Python and Django
+     lostfound_backend/.venv/
+     lostfound_backend/*.pyc
+     lostfound_backend/__pycache__/
+     lostfound_backend/db.sqlite3
+     lostfound_backend/staticfiles/
+     lostfound_backend/media/
+     lostfound_backend/*.env
+     lostfound_backend/debug.log
+     lostfound_backend/production.log
+
+     # Frontend (React)
+     lostfound_frontend/node_modules/
+     lostfound_frontend/.env
+     lostfound_frontend/dist/
+     lostfound_frontend/dist-ssr/
+     lostfound_frontend/*.local
+     lostfound_frontend/logs/
+     lostfound_frontend/*.log
+     lostfound_frontend/npm-debug.log*
+     lostfound_frontend/yarn-debug.log*
+     lostfound_frontend/yarn-error.log*
+     lostfound_frontend/pnpm-debug.log*
+     lostfound_frontend/lerna-debug.log*
+
+     # Editor and OS files
+     .vscode/*
+     !.vscode/extensions.json
+     .idea/
+     .DS_Store
+     *.suo
+     *.ntvs*
+     *.njsproj
+     *.sln
+     *.sw?

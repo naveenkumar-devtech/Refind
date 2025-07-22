@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report Found Item</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.9/babel.min.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div id="root" class="container mx-auto p-4"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        const ReportFound = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [accessToken, setAccessToken] = useState('');
+            const [categories, setCategories] = useState([]);
+            const [itemData, setItemData] = useState({
+                title: '', description: '', location: '', category: '', status: 'found', private_note: '', image: null
+            });
+            const [error, setError] = useState('');
+            const [success, setSuccess] = useState('');
+            const fileInputRef = useRef(null);
+
+            const checkAuth = () => {
+                const token = localStorage.getItem('accessToken');
+                if (token) {
+                    setAccessToken(token);
+                    setIsAuthenticated(true);
+                }
+            };
+
+            const fetchCategories = async () => {
+                try {
+                    const response = await axios.get('http://127.0.0.1:8000/api/categories/');
+                    setCategories(response.data);
+                    console.log('Categories:', response.data);
+                } catch (err) {
+                    console.error('Error fetching categories:', err.response?.data || err);
+                    setError('Failed to load categories');
+                }
+            };
+
+            const handleItemSubmit = async (e) => {
+                e.preventDefault();
+                if (!accessToken) {
+                    setError('Please login again to report an item');
+                    setIsAuthenticated(false);
+                    return;
+                }
+                const formData = new FormData();
+                for (const key in itemData) {
+                    if (key === 'category' && itemData[key]) {
+                        formData.append(key, parseInt(itemData[key]));
+                    } else if (key === 'image' && itemData[key] instanceof File) {
+                        formData.append(key, itemData[key]);
+                    } else if (key !== 'image' && itemData[key]) {
+                        formData.append(key, itemData[key]);
+                    }
+                }
+                console.log('FormData:', Array.from(formData.entries()));
+                try {
+                    const response = await axios.post('http://127.0.0.1:8000/api/items/', formData, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'multipart/form-data'
+                        }
+                    });
+                    setSuccess('Item reported successfully');
+                    setError('');
+                    setItemData({ title: '', description: '', location: '', category: '', status: 'found', private_note: '', image: null });
+                    if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                    }
+                    console.log('Item response:', response.data);
+                } catch (err) {
+                    console.error('Item submission error:', err.response?.data || err);
+                    setError('Failed to report item: ' + (err.response?.data?.image?.[0] || err.response?.data?.error || err.message));
+                }
+            };
+
+            useEffect(() => {
+                checkAuth();
+                if (isAuthenticated && accessToken) {
+                    fetchCategories();
+                }
+            }, [isAuthenticated, accessToken]);
+
+            return (
+                <div className="max-w-7xl mx-auto">
+                    <h2 className="text-2xl font-bold mb-4">Report Found Item</h2>
+                    <a href="/lost-found" className="bg-blue-500 text-white p-2 rounded mb-4 inline-block">Back to Dashboard</a>
+                    {error && <p className="text-red-500">{error}</p>}
+                    {success && <p className="text-green-500">{success}</p>}
+                    <form onSubmit={handleItemSubmit} className="bg-white p-6 rounded-lg shadow-md">
+                        <input
+                            type="text"
+                            placeholder="Title"
+                            value={itemData.title}
+                            onChange={(e) => setItemData({ ...itemData, title: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <textarea
+                            placeholder="Description"
+                            value={itemData.description}
+                            onChange={(e) => setItemData({ ...itemData, description: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <input
+                            type="text"
+                            placeholder="Location"
+                            value={itemData.location}
+                            onChange={(e) => setItemData({ ...itemData, location: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <select
+                            value={itemData.category}
+                            onChange={(e) => setItemData({ ...itemData, category: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        >
+                            <option value="">Select Category</option>
+                            {categories.map(category => (
+                                <option key={category.id} value={category.id}>{category.name}</option>
+                            ))}
+                        </select>
+                        <textarea
+                            placeholder="Private Note (for verification)"
+                            value={itemData.private_note}
+                            onChange={(e) => setItemData({ ...itemData, private_note: e.target.value })}
+                            className="w-full p-2 mb-2 border rounded"
+                        />
+                        <input
+                            type="file"
+                            accept="image/*"
+                            ref={fileInputRef}
+                            onChange={(e) => setItemData({ ...itemData, image: e.target.files[0] || null })}
+                            className="w-full p-2 mb-2"
+                        />
+                        <button type="submit" className="bg-blue-500 text-white p-2 rounded">Submit Found Item</button>
+                    </form>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<ReportFound />, document.getElementById('root'));
+    </script>
+</body>
+
+</html>

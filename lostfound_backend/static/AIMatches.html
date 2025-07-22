@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Matches</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.22.9/babel.min.js"></script>
+</head>
+
+<body class="bg-gray-100">
+    <div id="root" className="container mx-auto p-4"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const AIMatches = () => {
+            const [isAuthenticated, setIsAuthenticated] = useState(false);
+            const [accessToken, setAccessToken] = useState('');
+            const [matches, setMatches] = useState([]);
+            const [messageItems, setMessageItems] = useState([]);
+            const [recipients, setRecipients] = useState([]);
+            const [chatData, setChatData] = useState({ item_id: '', receiver_id: '', message: '' });
+            const [chatThread, setChatThread] = useState([]);
+            const [error, setError] = useState('');
+            const [success, setSuccess] = useState('');
+
+            const checkAuth = () => {
+                const token = localStorage.getItem('accessToken');
+                if (token) {
+                    setAccessToken(token);
+                    setIsAuthenticated(true);
+                }
+            };
+
+            const fetchMatches = async () => {
+                if (!accessToken) return;
+                try {
+                    const response = await axios.get('http://127.0.0.1:8000/api/ai-matches/', {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    setMatches(response.data);
+                    console.log('AI matches:', response.data);
+                } catch (err) {
+                    console.error('Error fetching AI matches:', err.response?.data || err);
+                    setError('Failed to load AI matches');
+                }
+            };
+
+            const fetchMessageItems = async () => {
+                if (!accessToken) return;
+                try {
+                    const response = await axios.get('http://127.0.0.1:8000/api/my-messages/items/', {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    setMessageItems(response.data);
+                    console.log('Message items:', response.data);
+                } catch (err) {
+                    console.error('Error fetching message items:', err.response?.data || err);
+                    setError('Failed to load message items');
+                }
+            };
+
+            const fetchRecipients = async (itemId) => {
+                if (!accessToken || !itemId) {
+                    setRecipients([]);
+                    setChatData({ ...chatData, receiver_id: '' });
+                    return;
+                }
+                try {
+                    const response = await axios.get(`http://127.0.0.1:8000/api/my-messages/recipients/${itemId}/`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    setRecipients(response.data);
+                    console.log('Recipients for item', itemId, ':', response.data);
+                    if (response.data.length === 1) {
+                        setChatData({ ...chatData, item_id: itemId, receiver_id: response.data[0].id.toString() });
+                        console.log('Auto-selected recipient:', response.data[0].id);
+                    } else {
+                        setChatData({ ...chatData, item_id: itemId, receiver_id: '' });
+                    }
+                } catch (err) {
+                    console.error('Error fetching recipients:', err.response?.data || err);
+                    setError('Failed to load recipients: ' + (err.response?.data?.error || err.message));
+                    setRecipients([]);
+                    setChatData({ ...chatData, receiver_id: '' });
+                }
+            };
+
+            const handleChatSubmit = async (e) => {
+                e.preventDefault();
+                if (!accessToken) {
+                    setError('Please login again to send a message');
+                    setIsAuthenticated(false);
+                    return;
+                }
+                if (!chatData.message.trim()) {
+                    setError('Message cannot be empty');
+                    return;
+                }
+                if (!chatData.item_id || !chatData.receiver_id || isNaN(parseInt(chatData.receiver_id))) {
+                    setError('Please select a valid item and recipient');
+                    return;
+                }
+                const payload = {
+                    item: parseInt(chatData.item_id),
+                    receiver: parseInt(chatData.receiver_id),
+                    message: chatData.message.trim()
+                };
+                console.log('Chat payload:', JSON.stringify(payload));
+                try {
+                    const response = await axios.post('http://127.0.0.1:8000/api/messages/', payload, {
+                        headers: {
+                            'Authorization': `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    setSuccess('Message sent successfully');
+                    setError('');
+                    setChatData({ item_id: '', receiver_id: '', message: '' });
+                    setRecipients([]);
+                    console.log('Message response:', response.data);
+                    fetchChatThread(chatData.item_id, chatData.receiver_id);
+                } catch (err) {
+                    console.error('Chat error:', err.response?.data || err);
+                    setError('Failed to send message: ' + JSON.stringify(err.response?.data || err.message));
+                }
+            };
+
+            const fetchChatThread = async (item_id, receiver_id) => {
+                if (!accessToken || !item_id || !receiver_id || isNaN(parseInt(receiver_id))) {
+                    setError('Please select an item and recipient to view chat');
+                    return;
+                }
+                try {
+                    const response = await axios.get(`http://127.0.0.1:8000/api/chat/?item_id=${item_id}&receiver_id=${receiver_id}`, {
+                        headers: { 'Authorization': `Bearer ${accessToken}` }
+                    });
+                    setChatThread(response.data);
+                    console.log('Chat thread:', response.data);
+                } catch (err) {
+                    console.error('Chat thread error:', err.response?.data || err);
+                    setError('Failed to load chat thread');
+                }
+            };
+
+            const handleConnect = (itemId, recipientId) => {
+                setChatData({ item_id: itemId.toString(), receiver_id: recipientId.toString(), message: '' });
+                fetchRecipients(itemId);
+                console.log('Connect clicked: item_id:', itemId, 'recipient_id:', recipientId);
+            };
+
+            useEffect(() => {
+                checkAuth();
+                if (isAuthenticated && accessToken) {
+                    fetchMatches();
+                    fetchMessageItems();
+                }
+            }, [isAuthenticated, accessToken]);
+
+            return (
+                <div className="max-w-7xl mx-auto">
+                    <h2 className="text-2xl font-bold mb-4">AI Matches</h2>
+                    <a href="/lost-found" className="bg-blue-500 text-white p-2 rounded mb-4 inline-block">Back to Dashboard</a>
+                    {error && <p className="text-red-500">{error}</p>}
+                    {success && <p className="text-green-500">{success}</p>}
+                    <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+                        <h3 className="text-xl font-semibold mb-4">Matched Items</h3>
+                        {matches.map(match => (
+                            <div key={match.id} className="mb-4 p-4 border rounded">
+                                <p><strong>Lost Item:</strong> {match.lost_item.title} ({match.lost_item.location})</p>
+                                <p><strong>Found Item:</strong> {match.found_item.title} ({match.found_item.location})</p>
+                                <p><strong>Similarity Score:</strong> {match.similarity_score.toFixed(2)}%</p>
+                                <button
+                                    onClick={() => handleConnect(match.lost_item.id, match.found_item.user_id)}
+                                    className="bg-purple-500 text-white p-2 rounded mt-2"
+                                >
+                                    Connect with Finder
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="bg-white p-6 rounded-lg shadow-md">
+                        <h3 className="text-xl font-semibold mb-4">Chat</h3>
+                        <form onSubmit={handleChatSubmit} className="mb-4">
+                            <select
+                                value={chatData.item_id}
+                                onChange={(e) => {
+                                    const itemId = e.target.value;
+                                    setChatData({ ...chatData, item_id: itemId, receiver_id: '' });
+                                    setRecipients([]);
+                                    if (itemId) fetchRecipients(itemId);
+                                }}
+                                className="w-full p-2 mb-2 border rounded"
+                            >
+                                <option value="">Select Item</option>
+                                {messageItems.map(item => (
+                                    <option key={item.id} value={item.id}>{item.title} ({item.status})</option>
+                                ))}
+                            </select>
+                            <div className="flex items-center mb-2">
+                                <select
+                                    value={chatData.receiver_id}
+                                    onChange={(e) => {
+                                        const value = e.target.value;
+                                        setChatData({ ...chatData, receiver_id: value });
+                                        console.log('Selected receiver_id:', value);
+                                    }}
+                                    className="w-full p-2 border rounded"
+                                    disabled={!chatData.item_id || recipients.length === 0}
+                                >
+                                    <option value="">
+                                        {recipients.length === 0 && chatData.item_id
+                                            ? 'No recipients available'
+                                            : 'Select Recipient'}
+                                    </option>
+                                    {recipients.map(user => (
+                                        <option key={user.id} value={user.id}>{user.username}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => chatData.item_id && fetchRecipients(chatData.item_id)}
+                                    className="ml-2 bg-gray-300 text-black p-2 rounded"
+                                    disabled={!chatData.item_id}
+                                >
+                                    Refresh Recipients
+                                </button>
+                            </div>
+                            <textarea
+                                placeholder="Message"
+                                value={chatData.message}
+                                onChange={(e) => setChatData({ ...chatData, message: e.target.value })}
+                                className="w-full p-2 mb-2 border rounded"
+                            />
+                            <button
+                                type="submit"
+                                className={`bg-blue-500 text-white p-2 rounded ${(!chatData.item_id || !chatData.receiver_id || isNaN(parseInt(chatData.receiver_id))) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                disabled={!chatData.item_id || !chatData.receiver_id || isNaN(parseInt(chatData.receiver_id))}
+                            >
+                                Send Message
+                            </button>
+                        </form>
+                        <div>
+                            {chatThread.map(message => (
+                                <div key={message.id} className="mb-2 p-2 border rounded">
+                                    <p><strong>{message.sender_username}:</strong> {message.message}</p>
+                                    <p className="text-sm text-gray-500">{new Date(message.timestamp).toLocaleString()}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        ReactDOM.render(<AIMatches />, document.getElementById('root'));
+    </script>
+</body>
+
+</html>

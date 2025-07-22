@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refind Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        #chat-container {
+            border: 1px solid #ccc;
+            padding: 10px;
+            height: 300px;
+            overflow-y: scroll;
+        }
+
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+        }
+
+        .user {
+            background-color: #e6f3ff;
+            text-align: right;
+        }
+
+        .bot {
+            background-color: #f0f0f0;
+        }
+
+        #chat-input {
+            width: 80%;
+            padding: 5px;
+        }
+
+        button {
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Refind Chatbot</h2>
+    <div id="chat-container"></div>
+    <input type="text" id="chat-input" placeholder="E.g., How to report a lost item?">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        async function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatContainer = document.getElementById('chat-container');
+            chatContainer.innerHTML += `<div class="message user">${query}</div>`;
+            input.value = '';
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/chat/support/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                });
+                const data = await response.json();
+                chatContainer.innerHTML += `<div class="message bot">${data.message}</div>`;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            } catch (error) {
+                chatContainer.innerHTML += `<div class="message bot">Error: Failed to connect to server.</div>`;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        document.getElementById('chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+    </script>
+</body>
+
+</html>
