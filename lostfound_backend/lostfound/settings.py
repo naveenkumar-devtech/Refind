@@ -1,35 +1,28 @@
 import os
 from pathlib import Path
-from datetime import timedelta
 import dj_database_url
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Ensure logs directory exists
 LOGS_DIR = BASE_DIR / 'logs'
-LOGS_DIR.mkdir(exist_ok=True)  # Create logs/ directory if it doesn't exist
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Helper function to ensure environment variables are set
+def get_env_variable(var_name, default=None):
+    value = os.getenv(var_name, default)
+    if value is None:
+        raise ImproperlyConfigured(f"Set the {var_name} environment variable")
+    return value
 
 # Security settings
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'your-default-secret-key')
-DEBUG = os.getenv('DEBUG', 'False') == 'True'
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+SECRET_KEY = get_env_variable('DJANGO_SECRET_KEY')
+DEBUG = get_env_variable('DEBUG', 'False') == 'True'
+ALLOWED_HOSTS = get_env_variable('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 if not DEBUG:
-    ALLOWED_HOSTS += ['*.up.railway.app']
-
-# Security settings for production
-if not DEBUG:
-    SECURE_SSL_REDIRECT = True
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    ALLOWED_HOSTS.extend(['*.up.railway.app', 'your-backend-app-name.up.railway.app'])
 
 # Application definition
 INSTALLED_APPS = [
@@ -38,6 +31,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'whitenoise.runserver_nostatic',  # Ensure whitenoise works in development
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -66,7 +60,7 @@ ROOT_URLCONF = 'lostfound.urls'
 # Database
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL', f'sqlite:///{BASE_DIR / "db.sqlite3"}'),
+        default=get_env_variable('DATABASE_URL'),
         conn_max_age=600,
         conn_health_checks=True,
     )
@@ -105,6 +99,7 @@ REST_FRAMEWORK = {
 }
 
 # JWT Configuration
+from datetime import timedelta
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(hours=24),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -116,7 +111,7 @@ SIMPLE_JWT = {
 
 # Static and Media Files
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'static'
+STATIC_ROOT = BASE_DIR / 'staticfiles'  # Changed to avoid conflicts
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
@@ -127,16 +122,17 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', 'refindaiapp@gmail.com')
-EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
+EMAIL_HOST_USER = get_env_variable('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = get_env_variable('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # Site and CORS
-SITE_URL = os.getenv('SITE_URL', 'http://127.0.0.1:8000')
+SITE_URL = get_env_variable('SITE_URL', 'http://127.0.0.1:8000')
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
-] if DEBUG else [os.getenv('PROD_CORS_ORIGIN', 'https://your-frontend-app-name.up.railway.app')]
+] if DEBUG else [get_env_variable('PROD_CORS_ORIGIN')]
+
 CORS_ALLOW_CREDENTIALS = True
 
 # Internationalization
@@ -149,7 +145,7 @@ USE_TZ = True
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
+        'DIRS': [],  # Removed templates/ since no HTML files are used
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -181,13 +177,8 @@ LOGGING = {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
         },
-        'mail_admins': {
-            'level': 'ERROR',
-            'class': 'django.utils.log.AdminEmailHandler',
-            'include_html': True,
-        },
         'file': {
-            'level': 'INFO',
+            'level': 'DEBUG',  # Changed to DEBUG for more detail
             'class': 'logging.FileHandler',
             'filename': LOGS_DIR / 'debug.log',
             'formatter': 'verbose',
@@ -195,28 +186,28 @@ LOGGING = {
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'mail_admins', 'file'],
-            'level': 'INFO',
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG',  # Changed to DEBUG
             'propagate': True,
         },
         'rest_framework': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
         'api': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
         'chatbot': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
         'authentication': {
             'handlers': ['console', 'file'],
-            'level': 'INFO',
+            'level': 'DEBUG',
             'propagate': False,
         },
     },
