@@ -20,11 +20,9 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 # --- Allowed Hosts Configuration ---
 # This setting defines which domains can serve the Django site.
 ALLOWED_HOSTS = []
-if DEBUG:
-    # For local development, allow localhost and 127.0.0.1
-    ALLOWED_HOSTS.extend(['localhost', '127.0.0.1'])
-else:
-    # For production on Railway, get the allowed hosts from an environment variable.
+# In production, get the allowed hosts from the ALLOWED_HOSTS environment variable.
+# It should be a comma-separated string (e.g., "your-app.up.railway.app,www.your-app.up.railway.app")
+if not DEBUG:
     prod_hosts = os.getenv('ALLOWED_HOSTS')
     if prod_hosts:
         ALLOWED_HOSTS.extend(prod_hosts.split(','))
@@ -80,11 +78,8 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
-# --- Database Configuration ---
-# Check if we're in a build environment (Railway sets RAILWAY_ENVIRONMENT)
-is_railway_build = os.getenv('RAILWAY_ENVIRONMENT') and not os.getenv('DATABASE_URL')
-database_url = os.getenv('DATABASE_URL')
 
+# --- Database Configuration (Final Resilient Structure) ---
 if DEBUG:
     # For local development, use SQLite.
     DATABASES = {
@@ -93,32 +88,18 @@ if DEBUG:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-elif is_railway_build:
-    # During Railway build phase, use SQLite in memory for collectstatic
-    # This prevents database connection errors during build
+else:
+    # For production, default to a dummy database. This is for the build phase.
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': ':memory:',
+            'ENGINE': 'django.db.backends.dummy',
         }
     }
-elif database_url:
-    # Production runtime with DATABASE_URL available
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=database_url,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
-else:
-    # Final fallback for production
-    DATABASES = {
-        'default': dj_database_url.parse(
-            os.environ.get('DATABASE_URL', 'sqlite:///:memory:'),
-            conn_max_age=600,
-        )
-    }
+    # If DATABASE_URL is available (in release/web phases), then use it.
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        DATABASES['default'] = dj_database_url.config(conn_max_age=600)
+
 
 # --- Authentication ---
 AUTH_USER_MODEL = 'api.CustomUser'
