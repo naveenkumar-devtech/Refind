@@ -81,6 +81,8 @@ TEMPLATES = [
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
 # --- Database Configuration ---
+# Check if we're in a build environment (Railway sets RAILWAY_ENVIRONMENT)
+is_railway_build = os.getenv('RAILWAY_ENVIRONMENT') and not os.getenv('DATABASE_URL')
 database_url = os.getenv('DATABASE_URL')
 
 if DEBUG:
@@ -91,8 +93,17 @@ if DEBUG:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+elif is_railway_build:
+    # During Railway build phase, use SQLite in memory for collectstatic
+    # This prevents database connection errors during build
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
 elif database_url:
-    # Use the provided DATABASE_URL for production
+    # Production runtime with DATABASE_URL available
     DATABASES = {
         'default': dj_database_url.config(
             default=database_url,
@@ -101,10 +112,10 @@ elif database_url:
         )
     }
 else:
-    # Fallback - this should not happen in production if DATABASE_URL is set
+    # Final fallback for production
     DATABASES = {
         'default': dj_database_url.parse(
-            'postgresql://user:pass@localhost/dbname',  # This will fail, which is what we want
+            os.environ.get('DATABASE_URL', 'sqlite:///:memory:'),
             conn_max_age=600,
         )
     }
