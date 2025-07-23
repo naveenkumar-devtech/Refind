@@ -82,31 +82,30 @@ TEMPLATES = [
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
 
-# --- Database Configuration (Updated for Build-Time Safety) ---
-DATABASES = {}
+# --- Database Configuration (More Resilient Structure) ---
+# Default to a dummy engine. This is used during the build process on Railway
+# when environment variables like DATABASE_URL are not yet available.
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.dummy',
+    }
+}
+
+# If a DATABASE_URL is provided (which it will be in the release and web phases),
+# use it to configure the real database.
+database_url = os.getenv('DATABASE_URL')
+if database_url:
+    DATABASES['default'] = dj_database_url.config(
+        conn_max_age=600,
+        conn_health_checks=True,
+    )
+
+# For local development, if DEBUG is True, override everything to use SQLite.
 if DEBUG:
-    # In local development (DEBUG=True), use a simple SQLite database.
     DATABASES['default'] = {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
     }
-else:
-    # In production, configure from DATABASE_URL.
-    database_url = os.getenv('DATABASE_URL')
-    if database_url:
-        # If DATABASE_URL is available (in the release and web phases), use it.
-        DATABASES['default'] = dj_database_url.config(
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    else:
-        # This is a fallback for the Docker build process where DATABASE_URL is not available.
-        # It allows build-time commands to run without a real database.
-        # The 'release' phase in the Procfile will run migrations with the real DB.
-        print("WARNING: DATABASE_URL not found, using dummy database for build phase.")
-        DATABASES['default'] = {
-            'ENGINE': 'django.db.backends.dummy',
-        }
 
 
 # --- Authentication ---
@@ -126,32 +125,23 @@ USE_I18N = True
 USE_TZ = True
 
 # --- Static and Media Files ---
-# URL to use when referring to static files located in STATIC_ROOT.
 STATIC_URL = '/static/'
-# The absolute path to the directory where collectstatic will collect static files.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-# Use WhiteNoise to serve static files efficiently in production.
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 # --- CORS (Cross-Origin Resource Sharing) Settings ---
-# This controls which frontend domains can make requests to your backend.
 if DEBUG:
-    # For local development, allow requests from the typical Vite/React dev server port.
     CORS_ALLOWED_ORIGINS = [
         'http://localhost:5173',
         'http://127.0.0.1:5173',
     ]
 else:
-    # In production, get the allowed origin from the PROD_CORS_ORIGIN env variable.
-    # This should be your frontend's public URL (e.g., https://your-frontend.up.railway.app)
     prod_origin = os.getenv('PROD_CORS_ORIGIN')
-    if prod_origin:
-        CORS_ALLOWED_ORIGINS = [prod_origin]
+    CORS_ALLOWED_ORIGINS = [prod_origin] if prod_origin else []
 
-# Allows cookies to be sent with cross-origin requests.
 CORS_ALLOW_CREDENTIALS = True
 
 # --- Email Configuration ---
@@ -164,8 +154,6 @@ EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # --- Site URL Configuration ---
-# Used for creating absolute URLs, for example in notification emails.
-# In production, this should be your backend's public URL.
 SITE_URL = os.getenv('SITE_URL', 'http://127.0.0.1:8000')
 
 # --- REST Framework and JWT Settings ---
@@ -236,6 +224,5 @@ LOGGING = {
             'level': 'DEBUG',
             'propagate': False,
         },
-        # Add other app loggers as needed
     },
 }
