@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import dj_database_url
 from django.core.exceptions import ImproperlyConfigured
+import logging
 
 # Build paths inside the project
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -14,7 +15,9 @@ LOGS_DIR.mkdir(exist_ok=True)
 def get_env_variable(var_name, default=None):
     value = os.getenv(var_name, default)
     if value is None:
+        logging.error(f"Missing environment variable: {var_name}")
         raise ImproperlyConfigured(f"Set the {var_name} environment variable")
+    logging.debug(f"Environment variable {var_name}: {value}")
     return value
 
 # Security settings
@@ -58,21 +61,27 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'lostfound.urls'
 
 # Database
-if DEBUG:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+try:
+    if DEBUG:
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / 'db.sqlite3',
+            }
         }
-    }
-else:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=get_env_variable('DATABASE_URL'),
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
-    }
+    else:
+        db_url = get_env_variable('DATABASE_URL')
+        logging.debug(f"Using DATABASE_URL: {db_url}")
+        DATABASES = {
+            'default': dj_database_url.config(
+                default=db_url,
+                conn_max_age=600,
+                conn_health_checks=True,
+            )
+        }
+except Exception as e:
+    logging.error(f"Database configuration failed: {str(e)}")
+    raise
 
 # Authentication
 AUTH_USER_MODEL = 'api.CustomUser'
