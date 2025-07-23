@@ -9,8 +9,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # --- Security Settings ---
 # It's crucial to keep the secret key secure in production.
-# We fetch it from an environment variable.
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
+# We fetch it from an environment variable. For the build process, where env vars
+# are not available, we provide a dummy key to allow the build to succeed.
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'dummy-insecure-secret-key-for-build-only')
 
 # DEBUG is set to 'False' in production for security.
 # The check `os.getenv('DEBUG', 'False') == 'True'` correctly handles this.
@@ -24,8 +25,6 @@ if DEBUG:
     ALLOWED_HOSTS.extend(['localhost', '127.0.0.1'])
 else:
     # For production on Railway, get the allowed hosts from an environment variable.
-    # You should set this to 'your-app-name.up.railway.app' or '*.up.railway.app'
-    # in your Railway variables.
     prod_hosts = os.getenv('ALLOWED_HOSTS')
     if prod_hosts:
         ALLOWED_HOSTS.extend(prod_hosts.split(','))
@@ -82,30 +81,26 @@ TEMPLATES = [
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
 
-# --- Database Configuration (More Resilient Structure) ---
-# Default to a dummy engine. This is used during the build process on Railway
-# when environment variables like DATABASE_URL are not yet available.
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.dummy',
-    }
-}
-
-# If a DATABASE_URL is provided (which it will be in the release and web phases),
-# use it to configure the real database.
-database_url = os.getenv('DATABASE_URL')
-if database_url:
-    DATABASES['default'] = dj_database_url.config(
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-
-# For local development, if DEBUG is True, override everything to use SQLite.
+# --- Database Configuration (Final Resilient Structure) ---
 if DEBUG:
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+    # For local development, use SQLite.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
+else:
+    # For production, default to a dummy database. This is for the build phase.
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.dummy',
+        }
+    }
+    # If DATABASE_URL is available (in release/web phases), then use it.
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        DATABASES['default'] = dj_database_url.config(conn_max_age=600)
 
 
 # --- Authentication ---
