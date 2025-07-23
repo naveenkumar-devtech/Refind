@@ -80,8 +80,9 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
+# --- Database Configuration ---
+database_url = os.getenv('DATABASE_URL')
 
-# --- Database Configuration (Final Resilient Structure) ---
 if DEBUG:
     # For local development, use SQLite.
     DATABASES = {
@@ -90,18 +91,23 @@ if DEBUG:
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-else:
-    # For production, default to a dummy database. This is for the build phase.
+elif database_url:
+    # Use the provided DATABASE_URL for production
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.dummy',
-        }
+        'default': dj_database_url.config(
+            default=database_url,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-    # If DATABASE_URL is available (in release/web phases), then use it.
-    database_url = os.getenv('DATABASE_URL')
-    if database_url:
-        DATABASES['default'] = dj_database_url.config(conn_max_age=600)
-
+else:
+    # Fallback - this should not happen in production if DATABASE_URL is set
+    DATABASES = {
+        'default': dj_database_url.parse(
+            'postgresql://user:pass@localhost/dbname',  # This will fail, which is what we want
+            conn_max_age=600,
+        )
+    }
 
 # --- Authentication ---
 AUTH_USER_MODEL = 'api.CustomUser'
