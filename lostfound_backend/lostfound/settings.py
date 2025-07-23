@@ -82,25 +82,31 @@ TEMPLATES = [
 WSGI_APPLICATION = 'lostfound.wsgi.application'
 
 
-# --- Database Configuration (Corrected and Simplified) ---
-# https://docs.djangoproject.com/en/stable/ref/settings/#databases
+# --- Database Configuration (Updated for Build-Time Safety) ---
+DATABASES = {}
 if DEBUG:
     # In local development (DEBUG=True), use a simple SQLite database.
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 else:
-    # In production (on Railway), configure the database using the DATABASE_URL env var.
-    # dj_database_url.config() will automatically read the DATABASE_URL.
-    DATABASES = {
-        'default': dj_database_url.config(
+    # In production, configure from DATABASE_URL.
+    database_url = os.getenv('DATABASE_URL')
+    if database_url:
+        # If DATABASE_URL is available (in the release and web phases), use it.
+        DATABASES['default'] = dj_database_url.config(
             conn_max_age=600,
             conn_health_checks=True,
         )
-    }
+    else:
+        # This is a fallback for the Docker build process where DATABASE_URL is not available.
+        # It allows build-time commands to run without a real database.
+        # The 'release' phase in the Procfile will run migrations with the real DB.
+        print("WARNING: DATABASE_URL not found, using dummy database for build phase.")
+        DATABASES['default'] = {
+            'ENGINE': 'django.db.backends.dummy',
+        }
 
 
 # --- Authentication ---
@@ -189,10 +195,6 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    # The following line was causing an ImportError because the serializer is not defined.
-    # It has been commented out to allow the application to deploy successfully.
-    # You can uncomment this and create the serializer in api/serializers.py when needed.
-    # 'TOKEN_OBTAIN_SERIALIZER': 'api.serializers.CustomTokenObtainPairSerializer',
 }
 
 # --- Default primary key field type ---
