@@ -89,16 +89,15 @@ if DEBUG:
         }
     }
 else:
-    # For production, default to a dummy database. This is for the build phase.
+    # For production, use the DATABASE_URL environment variable.
+    # If it's not available (during the build process), fall back to an
+    # in-memory SQLite database to allow build commands to run.
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.dummy',
-        }
+        'default': dj_database_url.config(
+            default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+            conn_max_age=600
+        )
     }
-    # If DATABASE_URL is available (in release/web phases), then use it.
-    database_url = os.getenv('DATABASE_URL')
-    if database_url:
-        DATABASES['default'] = dj_database_url.config(conn_max_age=600)
 
 
 # --- Authentication ---
@@ -218,5 +217,4 @@ LOGGING = {
             'propagate': False,
         },
     },
-    
 }
