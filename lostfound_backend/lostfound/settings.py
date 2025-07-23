@@ -189,7 +189,10 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
-    'TOKEN_OBTAIN_SERIALIZER': 'api.serializers.CustomTokenObtainPairSerializer',
+    # The following line was causing an ImportError because the serializer is not defined.
+    # It has been commented out to allow the application to deploy successfully.
+    # You can uncomment this and create the serializer in api/serializers.py when needed.
+    # 'TOKEN_OBTAIN_SERIALIZER': 'api.serializers.CustomTokenObtainPairSerializer',
 }
 
 # --- Default primary key field type ---
