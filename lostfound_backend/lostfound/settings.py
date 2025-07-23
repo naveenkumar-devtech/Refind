@@ -31,7 +31,7 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'whitenoise.runserver_nostatic',  # Ensure whitenoise works in development
+    'whitenoise.runserver_nostatic',
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
@@ -58,13 +58,21 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'lostfound.urls'
 
 # Database
-DATABASES = {
-    'default': dj_database_url.config(
-        default=get_env_variable('DATABASE_URL'),
-        conn_max_age=600,
-        conn_health_checks=True,
-    )
-}
+if DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+else:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=get_env_variable('DATABASE_URL'),
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
+    }
 
 # Authentication
 AUTH_USER_MODEL = 'api.CustomUser'
@@ -111,7 +119,7 @@ SIMPLE_JWT = {
 
 # Static and Media Files
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'  # Changed to avoid conflicts
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
@@ -132,7 +140,6 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ] if DEBUG else [get_env_variable('PROD_CORS_ORIGIN')]
-
 CORS_ALLOW_CREDENTIALS = True
 
 # Internationalization
@@ -145,7 +152,7 @@ USE_TZ = True
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],  # Removed templates/ since no HTML files are used
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -178,7 +185,7 @@ LOGGING = {
             'formatter': 'verbose',
         },
         'file': {
-            'level': 'DEBUG',  # Changed to DEBUG for more detail
+            'level': 'DEBUG',
             'class': 'logging.FileHandler',
             'filename': LOGS_DIR / 'debug.log',
             'formatter': 'verbose',
@@ -187,7 +194,7 @@ LOGGING = {
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
-            'level': 'DEBUG',  # Changed to DEBUG
+            'level': 'DEBUG',
             'propagate': True,
         },
         'rest_framework': {
